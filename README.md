@@ -8,11 +8,11 @@ Trained on the [FACADE Dataset](http://cmp.felk.cvut.cz/~tylecr1/facade/) for ab
 
 After 150 epochs
 
-![sample1](../samples/pix2pix/e_150_1.jpg)
+![sample1](./samples/pix2pix/e_150_1.jpg)
 
-![sample2](../samples/pix2pix/e_150_2.jpg)
+![sample2](./samples/pix2pix/e_150_2.jpg)
 
-![sample3](../samples/pix2pix/e_150_3.jpg)
+![sample3](./samples/pix2pix/e_150_3.jpg)
 
 
 ## CycleGAN results
