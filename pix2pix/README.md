@@ -7,7 +7,7 @@ Fun implementation, not optimised!
 
 ## Results
 
-Quickly trained on the [FACADE Dataset](http://cmp.felk.cvut.cz/~tylecr1/facade/) for about 100 epochs on a 2080 Super
+Trained on the [FACADE Dataset](http://cmp.felk.cvut.cz/~tylecr1/facade/) for about 150 epochs
 
 After 150 epochs
 
