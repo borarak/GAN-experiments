@@ -1,4 +1,6 @@
-data/
+data2/
 runs/
 .idea/
 models/
+data/
+notebooks/

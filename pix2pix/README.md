@@ -19,9 +19,6 @@ After 150 epochs
 
 
 
-@TODO: Train on the the [Shoes](https://www.eecs.qmul.ac.uk/~qian/Project_cvpr16.html) dataset
-
-
 
 
 

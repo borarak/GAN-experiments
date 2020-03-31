@@ -6,6 +6,7 @@ import torch
 from torch import nn as nn
 from torch.autograd import Variable
 from PIL import Image
+import random
 from torchvision.transforms import ColorJitter, RandomResizedCrop, ToTensor, Compose, ToPILImage
 from torch.utils.tensorboard import SummaryWriter
 
@@ -33,6 +34,8 @@ CHANNELS_IN_DIS = [512] + [
 ]
 D_CHANNELS_OUT = [512, 512, 512, 512, 256, 128, 64, 3]
 
+LAMBDA = 100
+
 
 def get_rgb_image(file_name):
     try:
@@ -55,8 +58,13 @@ def np2pil(img):
 
 
 def img2pil(file_name):
-    img = get_rgb_image(file_name)
-    img = np2pil(cv2np(img))
+    img = Image.open(file_name).resize((256, 256))
+    if np.asarray(img).shape[2] == 4:
+        img = np.asarray(img)
+        img = img[:, :, 3:]
+        img = np.concatenate((img, img, img), axis=2)
+        img = 1 - img
+        img = Image.fromarray(img)
     return img
 
 
@@ -64,21 +72,50 @@ class Image2ImageDataset(torch.utils.data.Dataset):
     """
     Dataset for the Faceades dataset (base + extended)
     """
-    def __init__(self, root_dir):
-        self.root_dir = os.path.join(root_dir)
-        self.image_names = [
-            str(x.split(".")[0]) for x in os.listdir(self.root_dir)
-            if x.endswith(".jpg")
-        ]
+    def __init__(self, root_dir, target_dir=None, dataset_name="facade"):
+        self.root_dir = root_dir if os.path.isdir(root_dir) else ValueError(
+            "valid input image directory has to be specified")
+        self.target_dir = target_dir
+        self.dataset_name = dataset_name
+
+        if dataset_name not in ["facade", "shoes"]:
+            raise NotImplemented("Can read only facade and shoes dataset")
+
+        if self.dataset_name == "facade":
+            self.input_images = [
+                str(x.split(".")[0]) for x in os.listdir(self.root_dir)
+                if x.endswith(".jpg")
+            ]
+        elif dataset_name == "shoes":
+            if self.target_dir is None:
+                raise ValueError("If target images nned to be specified")
+            self.input_images = [
+                str(x.split(".")[0]) for x in os.listdir(self.root_dir)
+                if x.endswith(".png")
+            ]
+            random.shuffle(self.input_images)
+            #print("input images: ", self.input_images)
 
     def __len__(self):
-        return len(list(map(str, Path(self.root_dir).glob("*.jpg"))))
+        if self.dataset_name == "facade":
+            return len(list(map(str, Path(self.root_dir).glob("*.jpg"))))
+        else:
+            return len(list(map(str, Path(self.target_dir).glob("*.png"))))
 
     def __getitem__(self, idx):
-        images = [
-            os.path.join(self.root_dir, self.image_names[idx]) + ".jpg",
-            os.path.join(self.root_dir, self.image_names[idx]) + ".png"
-        ]
+        if self.dataset_name == "facade":
+            images = [
+                os.path.join(self.root_dir, self.input_images[idx]) + ".jpg",
+                os.path.join(self.root_dir, self.input_images[idx]) + ".png"
+            ]
+        elif self.dataset_name == "shoes":
+            input_image = os.path.join(self.root_dir,
+                                       self.input_images[idx]) + ".png"
+            target_image = os.path.join(
+                self.target_dir,
+                str(str(Path(input_image).name)).split("_")[0]) + ".png"
+            images = [target_image, input_image]
+
         images = list(map(img2pil, images))
         images = [transforms(img) for img in images]
         return images
@@ -193,18 +230,34 @@ if __name__ == "__main__":
     gen = Generator().train().cuda()
     dis = Discriminator().train().cuda()
 
+    optim_d = torch.optim.Adam(dis.parameters(), lr=2e-4)
+    optim_g = torch.optim.Adam(gen.parameters(), lr=2e-4)
+
+    start_epoch = 0
+    if True:
+        saved_model = torch.load("./models/shoes_e14_i1500.pth")
+        gen.load_state_dict(saved_model['gen'])
+        dis.load_state_dict(saved_model['disc'])
+        optim_d.load_state_dict(saved_model['optim_D'])
+        optim_g.load_state_dict(saved_model['optim_G'])
+        start_epoch = saved_model['epoch'] + 1
+
+    # ds = Image2ImageDataset(
+    #     root_dir="/home/rex/datasets/CMP_facade/base_plus_extended")
     ds = Image2ImageDataset(
-        root_dir="/home/rex/datasets/CMP_facade/base_plus_extended")
+        root_dir=
+        "/home/rex/datasets/Sketch2Shape/ShoeV2/ShoeV2_F/ShoeV2_sketch_png",
+        target_dir=
+        "/home/rex/datasets/Sketch2Shape/ShoeV2/ShoeV2_F/ShoeV2_photo",
+        dataset_name="shoes")
+
     dataloader = torch.utils.data.DataLoader(ds, batch_size=1, shuffle=False)
 
     bce_criteria = nn.BCELoss().cuda()
     l1_criteria = nn.L1Loss().cuda()
 
-    optim_d = torch.optim.Adam(dis.parameters(), lr=2e-4)
-    optim_g = torch.optim.Adam(gen.parameters(), lr=2e-4)
-
     global_step = 0
-    for epoch in range(500):
+    for epoch in range(start_epoch, 500):
         for idx, data in enumerate(dataloader):
             target_image, input_image = data
             target_image = target_image.to(torch.device('cuda'))
@@ -226,8 +279,8 @@ if __name__ == "__main__":
             gen_op = gen(input_image)
             disc_fake = dis(input_image, gen_op)
             gen_loss = bce_criteria(
-                disc_fake, Variable(torch.ones_like(disc_fake))) + l1_criteria(
-                    input_image, gen_op)
+                disc_fake, Variable(torch.ones_like(disc_fake))) + (
+                    LAMBDA * l1_criteria(target_image, gen_op))
             gen_loss.backward()
             optim_g.step()
             writer.add_scalar('loss/generator', gen_loss, global_step=idx)
@@ -249,15 +302,18 @@ if __name__ == "__main__":
                 img = np.array(ToPILImage()(img))
                 cv2.imwrite(f"../data/{str(idx)}/e_{str(epoch)}.jpg",
                             cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-
-                torch.save({
-                    'gen': gen.state_dict(),
-                    'disc': dis.state_dict(),
-                    'optim_D': optim_d.state_dict(),
-                    'optim_G': optim_g.state_dict(),
-                    'epoch': epoch
-                }, f"./models/e{str(epoch)}.pth")
                 print(
                     f"epoch: {epoch}, idx: {idx}, Generator loss: {gen_loss.detach()} discriminator loss: {disc_loss.detach()}"
                 )
+
+            if idx % 500 == 0:
+                torch.save(
+                    {
+                        'gen': gen.state_dict(),
+                        'disc': dis.state_dict(),
+                        'optim_D': optim_d.state_dict(),
+                        'optim_G': optim_g.state_dict(),
+                        'epoch': epoch
+                    }, f"./models/shoes_e{str(epoch)}_i{str(idx)}.pth")
+
             global_step += 1
