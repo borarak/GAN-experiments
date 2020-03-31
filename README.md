@@ -1,8 +1,12 @@
 # GAN-experiments
 
-pix2pix, CycleGAN, StyleGAN2 etc - experiment repositoty
+This is my experiment repository for different GAN papers. For sometime it will mostly be unorganised but hopefully will grow into a library of useful losses, optimizers, layers etc. Unless otherwise credited i will re-write the code from scratch (just because it's more fun that way!)
 
-## [pix2pix](./pix2pix/README.md) 
+## Implementations so far
+
+1. [pix2pix](https://arxiv.org/abs/1611.07004)
+
+## [pix2pix](./pix2pix/README.md) details
 
 ### Results
 
@@ -35,8 +39,3 @@ I haven't optimized any hyper-parameters or trained enough since this is just fo
 
 - [ ] Add argument parser 
 - [ ] Clean-up network configs
-
-
-## CycleGAN results
-
-@TODO
